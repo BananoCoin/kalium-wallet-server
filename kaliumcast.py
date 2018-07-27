@@ -27,13 +27,13 @@ from bitstring import BitArray
 rdata = redis.StrictRedis(host='localhost', port=6379, db=2)  # used for price data and subscriber uuid info
 
 # get environment
-rpc_url = os.getenv('NANO_RPC_URL', 'http://127.0.0.1:7076')  # use env, else default to localhost rpc port
-work_url = os.getenv('NANO_WORK_URL', rpc_url)  # use env, else default to rpc
-callback_port = os.getenv('NANO_CALLBACK_PORT', 17076)
-socket_port = os.getenv('NANO_SOCKET_PORT', 443)
-cert_dir = os.getenv('NANO_CERT_DIR')  # use /home/username instead of /home/username/
-cert_key_file = os.getenv('NANO_KEY_FILE')  # TLS certificate private key
-cert_crt_file = os.getenv('NANO_CRT_FILE')  # full TLS certificate bundle
+rpc_url = os.getenv('BANANO_RPC_URL', 'http://127.0.0.1:7072')  # use env, else default to localhost rpc port
+work_url = os.getenv('BANANO_WORK_URL', rpc_url)  # use env, else default to rpc
+callback_port = os.getenv('BANANO_CALLBACK_PORT', 17072)
+socket_port = os.getenv('BANANO_SOCKET_PORT', 443)
+cert_dir = os.getenv('BANANO_CERT_DIR')  # use /home/username instead of /home/username/
+cert_key_file = os.getenv('BANANO_KEY_FILE')  # TLS certificate private key
+cert_crt_file = os.getenv('BANANO_CRT_FILE')  # full TLS certificate bundle
 
 # whitelisted commands, disallow anything used for local node-based wallet as we may be using multiple back ends
 allowed_rpc_actions = ["account_balance", "account_block_count", "account_check", "account_info", "account_history",
@@ -63,14 +63,14 @@ active_work = set()
 
 
 def address_decode(address):
-    # Given a string containing an XRB/NANO address, confirm validity and provide resulting hex address
-    if address[:4] == 'xrb_' or address[:5] == 'nano_':
+    # Given a string containing an BAN address, confirm validity and provide resulting hex address
+    if address[:4] == 'ban_':
         account_map = "13456789abcdefghijkmnopqrstuwxyz"  # each index = binary value, account_lookup[0] == '1'
         account_lookup = {}
         for i in range(0, 32):  # populate lookup index with prebuilt bitarrays ready to append
             account_lookup[account_map[i]] = BitArray(uint=i, length=5)
         data = address.split('_')[1]
-        acrop_key = data[:-8]  # we want everything after 'xrb_' or 'nano_' but before the 8-char checksum
+        acrop_key = data[:-8]  # we want everything after 'ban_' but before the 8-char checksum
         acrop_check = data[-8:]  # extract checksum
 
         # convert base-32 (5-bit) values to byte string by appending each 5-bit value to the bitstring,
@@ -108,14 +108,14 @@ def send_prices():
     if len(clients):
         print('[' + str(int(time.time())) + '] Pushing price data to ' + str(len(clients)) + ' subscribers...')
         logging.info('pushing price data to ' + str(len(clients)) + ' connections')
-        btc = float(rdata.hget("prices", "coinmarketcap:nano-btc").decode('utf-8'))
+        btc = float(rdata.hget("prices", "creeper:banano-btc").decode('utf-8'))
         for client in clients:
             try:
                 try:
                     currency = sub_pref_cur[client]
                 except:
                     currency = 'usd'
-                price = float(rdata.hget("prices", "coinmarketcap:nano-" + currency.lower()).decode('utf-8'))
+                price = float(rdata.hget("prices", "creeper:banano-" + currency.lower()).decode('utf-8'))
 
                 clients[client].write_message(
                     '{"currency":"' + currency.lower() + '","price":' + str(price) + ',"btc":' + str(btc) + '}')
@@ -215,7 +215,7 @@ def process_defer(handler, block):
 
                 if int(block['balance']) < prev_balance:
                     link_hash = block['link']
-                    if link_hash.startswith('xrb_') or link_hash.startswith('nano_'):
+                    if link_hash.startswith('ban_'):
                         link_hash = address_decode(link_hash)
                     # this is a send
                     link_response = yield rpc_request(rpc, json.dumps({
@@ -301,8 +301,8 @@ def rpc_subscribe(handler, account, currency):
         rdata.hset(handler.id, "last-connect", float(time.time()))
         info = json.loads(response.body)
         info['uuid'] = handler.id
-        price_cur = rdata.hget("prices", "coinmarketcap:nano-" + sub_pref_cur[handler.id].lower()).decode('utf-8')
-        price_btc = rdata.hget("prices", "coinmarketcap:nano-btc").decode('utf-8')
+        price_cur = rdata.hget("prices", "creeper:banano-" + sub_pref_cur[handler.id].lower()).decode('utf-8')
+        price_btc = rdata.hget("prices", "creeper:banano-btc").decode('utf-8')
         info['currency'] = sub_pref_cur[handler.id].lower()
         info['price'] = price_cur
         info['btc'] = price_btc
@@ -337,8 +337,8 @@ def rpc_reconnect(handler):
         sub_pref_cur[handler.id] = rdata.hget(handler.id, "currency").decode('utf-8')
         rdata.hset(handler.id, "last-connect", float(time.time()))
         info = json.loads(response.body.decode('ascii'))
-        price_cur = rdata.hget("prices", "coinmarketcap:nano-" + sub_pref_cur[handler.id].lower()).decode('utf-8')
-        price_btc = rdata.hget("prices", "coinmarketcap:nano-btc").decode('utf-8')
+        price_cur = rdata.hget("prices", "creeper:banano-" + sub_pref_cur[handler.id].lower()).decode('utf-8')
+        price_btc = rdata.hget("prices", "creeper:banano-btc").decode('utf-8')
         info['currency'] = sub_pref_cur[handler.id].lower()
         info['price'] = float(price_cur)
         info['btc'] = float(price_btc)
@@ -395,32 +395,32 @@ class WSHandler(tornado.websocket.WebSocketHandler):
             logging.error('request already active;' + message + ';' + self.request.remote_ip + ';' + self.id)
             return
         try:
-            nanocast_request = json.loads(message)
-            if nanocast_request['action'] in allowed_rpc_actions:
-                if 'request_id' in nanocast_request:
-                    requestid = nanocast_request['request_id']
+            kaliumcast_request = json.loads(message)
+            if kaliumcast_request['action'] in allowed_rpc_actions:
+                if 'request_id' in kaliumcast_request:
+                    requestid = kaliumcast_request['request_id']
                 else:
                     requestid = None
 
                 # adjust counts so nobody can block the node with a huge request - disregard, we have three nodes to
                 # load balance
 
-                # if 'count' in nanocast_request:
-                # if (nanocast_request['count'] < 0) or (nanocast_request['count'] > 1000):
-                #     nanocast_request['count'] = 1000
+                # if 'count' in kaliumcast_request:
+                # if (kaliumcast_request['count'] < 0) or (kaliumcast_request['count'] > 1000):
+                #     kaliumcast_request['count'] = 1000
                 #     logging.info('requested count is <0 or >1000, correcting to 1000;'+self.request.remote_ip+';'+self.id)
 
                 # rpc: account_subscribe
-                if nanocast_request['action'] == "account_subscribe":
+                if kaliumcast_request['action'] == "account_subscribe":
                     # already subscribed, reconnect
-                    if 'uuid' in nanocast_request:
+                    if 'uuid' in kaliumcast_request:
                         del clients[self.id]
-                        self.id = nanocast_request['uuid']
+                        self.id = kaliumcast_request['uuid']
                         clients[self.id] = self
                         logging.info('reconnection request;' + self.request.remote_ip + ';' + self.id)
                         try:
-                            if 'currency' in nanocast_request and nanocast_request['currency'] in currency_list:
-                                currency = nanocast_request['currency']
+                            if 'currency' in kaliumcast_request and kaliumcast_request['currency'] in currency_list:
+                                currency = kaliumcast_request['currency']
                                 sub_pref_cur[self.id] = currency
                                 rdata.hset(self.id, "currency", currency)
                             else:
@@ -443,11 +443,11 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                     else:
                         logging.info('subscription request;' + self.request.remote_ip + ';' + self.id)
                         try:
-                            if 'currency' in nanocast_request and nanocast_request['currency'] in currency_list:
-                                currency = nanocast_request['currency']
+                            if 'currency' in kaliumcast_request and kaliumcast_request['currency'] in currency_list:
+                                currency = kaliumcast_request['currency']
                             else:
                                 currency = "usd"
-                            rpc_subscribe(self, nanocast_request['account'], currency)
+                            rpc_subscribe(self, kaliumcast_request['account'], currency)
                             rdata.rpush("conntrack",
                                         str(float(time.time())) + ":" + self.id + ":connect:" + self.request.remote_ip)
                         except Exception as e:
@@ -457,16 +457,16 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             self.write_message(json.dumps(reply))
 
                 # rpc: price_data
-                elif nanocast_request['action'] == "price_data":
+                elif kaliumcast_request['action'] == "price_data":
                     logging.info('price data request;' + self.request.remote_ip + ';' + self.id)
                     try:
-                        if nanocast_request['currency'].upper() in currency_list:
+                        if kaliumcast_request['currency'].upper() in currency_list:
                             try:
                                 price = rdata.hget("prices",
-                                                   "coinmarketcap:nano-" + nanocast_request['currency'].lower()).decode(
+                                                   "creeper:banano-" + kaliumcast_request['currency'].lower()).decode(
                                     'utf-8')
                                 self.write_message(
-                                    '{"currency":"' + nanocast_request['currency'].lower() + '","price":' + str(
+                                    '{"currency":"' + kaliumcast_request['currency'].lower() + '","price":' + str(
                                         price) + '}')
                             except:
                                 logging.error(
@@ -481,16 +481,16 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                         self.write_message('{"error":"price data error","detail":"' + str(e) + '"}')
 
                 # rpc: account_check
-                elif nanocast_request['action'] == "account_check":
+                elif kaliumcast_request['action'] == "account_check":
                     logging.info('account check request;' + self.request.remote_ip + ';' + self.id)
                     try:
-                        rpc_accountcheck(self, nanocast_request['account'])
+                        rpc_accountcheck(self, kaliumcast_request['account'])
                     except Exception as e:
                         logging.error('account check error;' + str(e) + ';' + self.request.remote_ip + ';' + self.id)
                         self.write_message('{"error":"account check error","detail":"' + str(e) + '"}')
 
                 # rpc: work_generate
-                elif nanocast_request['action'] == "work_generate":
+                elif kaliumcast_request['action'] == "work_generate":
                     if self.request.headers.get('X-Client-Version') is None:
                         xcver = 0
                     else:
@@ -504,7 +504,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             '{"error":"work rpc denied","detail":"you are using an old client, please update"}')
                     else:
                         try:
-                            work_defer(self, json.dumps(nanocast_request))
+                            work_defer(self, json.dumps(kaliumcast_request))
                         except Exception as e:
                             logging.error('work rpc error;' + str(
                                 e) + ';' + self.request.remote_ip + ';' + self.id + ';User-Agent:' + str(
@@ -512,9 +512,9 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             self.write_message('{"error":"work rpc error","detail":"' + str(e) + '"}')
 
                 # rpc: process
-                elif nanocast_request['action'] == "process":
+                elif kaliumcast_request['action'] == "process":
                     try:
-                        process_defer(self, json.loads(nanocast_request['block']))
+                        process_defer(self, json.loads(kaliumcast_request['block']))
                     except Exception as e:
                         logging.error('process rpc error;' + str(
                             e) + ';' + self.request.remote_ip + ';' + self.id + ';User-Agent:' + str(
@@ -522,19 +522,19 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                         self.write_message('{"error":"process rpc error","detail":"' + str(e) + '"}')
 
                 # rpc: pending
-                elif nanocast_request['action'] == "pending":
+                elif kaliumcast_request['action'] == "pending":
                     try:
-                        pending_defer(self, json.dumps(nanocast_request))
+                        pending_defer(self, json.dumps(kaliumcast_request))
                     except Exception as e:
                         logging.error('pending rpc error;' + str(
                             e) + ';' + self.request.remote_ip + ';' + self.id + ';User-Agent:' + str(
                             self.request.headers.get('User-Agent')))
                         self.write_message('{"error":"pending rpc error","detail":"' + str(e) + '"}')
-                elif nanocast_request['action'] == 'account_history':
+                elif kaliumcast_request['action'] == 'account_history':
                     if rdata.hget(self.id, "account") is None:
-                        rdata.hset(self.id, "account", nanocast_request['account'])
+                        rdata.hset(self.id, "account", kaliumcast_request['account'])
                     try:
-                        rpc_defer(self, json.dumps(nanocast_request))
+                        rpc_defer(self, json.dumps(kaliumcast_request))
                     except Exception as e:
                         logging.error('rpc error;' + str(e) + ';' + self.request.remote_ip + ';' + self.id)
                         self.write_message('{"error":"rpc error","detail":"' + str(e) + '"}')
@@ -542,13 +542,13 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                 # rpc: fallthrough and error catch
                 else:
                     try:
-                        rpc_defer(self, json.dumps(nanocast_request))
+                        rpc_defer(self, json.dumps(kaliumcast_request))
                     except Exception as e:
                         logging.error('rpc error;' + str(e) + ';' + self.request.remote_ip + ';' + self.id)
                         self.write_message('{"error":"rpc error","detail":"' + str(e) + '"}')
             else:
                 logging.error(
-                    'rpc not allowed;' + nanocast_request['action'] + ';' + self.request.remote_ip + ';' + self.id)
+                    'rpc not allowed;' + kaliumcast_request['action'] + ';' + self.request.remote_ip + ';' + self.id)
                 self.write_message('{"error":"rpc command not allowed"}')
         except Exception as e:
             logging.error('uncaught error;' + str(e) + ';' + self.request.remote_ip + ';' + self.id)
@@ -603,14 +603,14 @@ nodecallback = tornado.web.Application([
 ])
 
 if __name__ == "__main__":
-    handler = WatchedFileHandler(os.environ.get("NANO_LOG_FILE", "nanocast.log"))
+    handler = WatchedFileHandler(os.environ.get("BANANO_LOG_FILE", "kaliumcast.log"))
     formatter = logging.Formatter("%(asctime)s;%(levelname)s;%(message)s", "%Y-%m-%d %H:%M:%S %z")
     handler.setFormatter(formatter)
     root = logging.getLogger()
-    root.setLevel(os.environ.get("NANO_LOG_LEVEL", "INFO"))
+    root.setLevel(os.environ.get("BANANO_LOG_LEVEL", "INFO"))
     root.addHandler(handler)
-    print("[" + str(int(time.time())) + "] Starting NANOCast Server...")
-    logging.info('Starting NANOCast Server')
+    print("[" + str(int(time.time())) + "] Starting KALIUMCast Server...")
+    logging.info('Starting KALIUMCast Server')
     logging.getLogger('tornado.access').disabled = True
 
     cert = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -622,7 +622,7 @@ if __name__ == "__main__":
 
     nodecallback.listen(callback_port)  # set in config.json as follows:
     # 	"callback_address": "127.0.0.1",
-    # 	"callback_port": "17076",
+    # 	"callback_port": "17072",
     # 	"callback_target": "/"
 
     # push latest price data to all subscribers every minute

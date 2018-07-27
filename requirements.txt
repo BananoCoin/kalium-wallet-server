@@ -1,0 +1,7 @@
+coinmarketcap
+requests
+certifi
+pyblake2
+redis
+tornado 
+bitstring
