@@ -304,9 +304,11 @@ def rpc_subscribe(handler, account, currency):
         info['uuid'] = handler.id
         price_cur = rdata.hget("prices", "creeper:banano-" + sub_pref_cur[handler.id].lower()).decode('utf-8')
         price_btc = rdata.hget("prices", "creeper:banano-btc").decode('utf-8')
+        price_nano = rdata.hget("prices", "creeper:banano-nano").decode('utf-8')
         info['currency'] = sub_pref_cur[handler.id].lower()
         info['price'] = price_cur
         info['btc'] = price_btc
+        info['nano'] = price_nano
         info = json.dumps(info)
         logging.info('subscribe response sent;' + str(
             strclean(response.body)) + ';' + handler.request.remote_ip + ';' + handler.id)
@@ -340,9 +342,11 @@ def rpc_reconnect(handler):
         info = json.loads(response.body.decode('ascii'))
         price_cur = rdata.hget("prices", "creeper:banano-" + sub_pref_cur[handler.id].lower()).decode('utf-8')
         price_btc = rdata.hget("prices", "creeper:banano-btc").decode('utf-8')
+        price_nano = rdata.hget("prices", "creeper:banano-nano").decode('utf-8')
         info['currency'] = sub_pref_cur[handler.id].lower()
         info['price'] = float(price_cur)
         info['btc'] = float(price_btc)
+        info['nano'] = float(price_nano)
         info = json.dumps(info)
 
         logging.info(
