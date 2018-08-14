@@ -29,6 +29,7 @@ def creeper():
 creeper()
 
 print("Creeper BANANO-USD:", rdata.hget("prices", "creeper:banano-usd").decode('utf-8'))
+print("Creeper BANANO-NANO:", rdata.hget("prices", "creeper:banano-nano").decode('utf-8'))
 print("Creeper BANANO-BTC:", rdata.hget("prices", "creeper:banano-btc").decode('utf-8'))
 print("Last Update:          ", rdata.hget("prices", "creeper:lastupdate").decode('utf-8'))
 

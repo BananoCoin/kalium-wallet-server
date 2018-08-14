@@ -109,6 +109,7 @@ def send_prices():
         print('[' + str(int(time.time())) + '] Pushing price data to ' + str(len(clients)) + ' subscribers...')
         logging.info('pushing price data to ' + str(len(clients)) + ' connections')
         btc = float(rdata.hget("prices", "creeper:banano-btc").decode('utf-8'))
+        nano = float(rdata.hget("prices", "creeper:banano-nano").decode('utf-8'))
         for client in clients:
             try:
                 try:
@@ -118,7 +119,7 @@ def send_prices():
                 price = float(rdata.hget("prices", "creeper:banano-" + currency.lower()).decode('utf-8'))
 
                 clients[client].write_message(
-                    '{"currency":"' + currency.lower() + '","price":' + str(price) + ',"btc":' + str(btc) + '}')
+                    '{"currency":"' + currency.lower() + '","price":' + str(price) + ',"btc":' + str(btc) + '"nano":' + str(nano) + '}')
             except:
                 print(' > Error pushing prices for client ' + client)
                 logging.error('error pushing prices for client;' + handler.request.remote_ip + ';' + client)
