@@ -254,6 +254,9 @@ def process_defer(handler, block):
 @tornado.gen.coroutine
 def work_request(http_client, body):
     response = yield http_client.fetch(work_url, method='POST', body=body)
+    # Fallback to RPC if error
+    if response.error:
+        response = yield http_client.fetch(rpc_url, method='POST', body=body)
     raise tornado.gen.Return(response)
 
 
