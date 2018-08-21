@@ -42,7 +42,7 @@ allowed_rpc_actions = ["account_balance", "account_block_count", "account_check"
                        "block_create", "blocks", "blocks_info", "block_account", "block_count", "block_count_type",
                        "chain", "delegators", "delegators_count", "frontiers", "frontier_count", "history",
                        "key_expand", "process", "representatives", "republish", "peers", "version", "pending",
-                       "pending_exists", "price_data", "work_generate", "account_representative_set"]
+                       "pending_exists", "price_data", "work_generate"]
 
 # all currencies polled on CMC
 currency_list = ["BTC", "AUD", "BRL", "CAD", "CHF", "CLP", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD", "HUF", "IDR",
@@ -504,7 +504,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                     else:
                         xcver = int(self.request.headers.get('X-Client-Version'))
                     # logging.debug(self.request.headers)
-                    if (self.request.headers.get('User-Agent') != 'SwiftWebSocket') and (xcver < 28):
+                    if (self.request.headers.get('User-Agent') != 'SwiftWebSocket') and (xcver < 1):
                         logging.error(
                             'work rpc denied;work disable;' + self.request.remote_ip + ';' + self.id + ';User-Agent:' + str(
                                 self.request.headers.get('User-Agent')))
