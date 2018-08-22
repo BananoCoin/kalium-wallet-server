@@ -35,7 +35,7 @@ sudo certbot certonly --standalone --preferred-challenges http -d <domain>
 ```
 
 ## Installation
-```git clone https://github.com/bbedward/kalium-wallet-server.git kaliumcast```
+```git clone https://github.com/BananoCoin/kalium-wallet-server.git kaliumcast```
 
 Ensure python3.6 is installed and
 ```
