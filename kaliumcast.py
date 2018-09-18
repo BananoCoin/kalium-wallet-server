@@ -6,6 +6,7 @@ import tornado.websocket
 import tornado.httpclient
 import tornado.httpserver
 import tornado.gen
+import aiofcm
 import json
 import redis
 import time
@@ -28,12 +29,13 @@ rdata = redis.StrictRedis(host='localhost', port=6379, db=2)  # used for price d
 
 # get environment
 rpc_url = os.getenv('BANANO_RPC_URL', 'http://127.0.0.1:7072')  # use env, else default to localhost rpc port
-work_url = os.getenv('BANANO_WORK_URL', rpc_url)  # use env, else default to rpc
 callback_port = os.getenv('BANANO_CALLBACK_PORT', 17072)
 socket_port = os.getenv('BANANO_SOCKET_PORT', 443)
 cert_dir = os.getenv('BANANO_CERT_DIR')  # use /home/username instead of /home/username/
 cert_key_file = os.getenv('BANANO_KEY_FILE')  # TLS certificate private key
 cert_crt_file = os.getenv('BANANO_CRT_FILE')  # full TLS certificate bundle
+fcm_api_key = os.getenv('FCM_API_KEY')
+fcm_sender_id = os.getenv('FCM_SENDER_ID')
 
 # whitelisted commands, disallow anything used for local node-based wallet as we may be using multiple back ends
 allowed_rpc_actions = ["account_balance", "account_block_count", "account_check", "account_info", "account_history",
@@ -98,6 +100,36 @@ def strclean(instr):
     elif type(instr) is bytes:
         return ' '.join(instr.decode('utf-8').split())
 
+def update_fcm_token_for_account(account, token):
+    """Store device FCM registration tokens in redis"""
+    rdata.set(token, account, ex=2592000) # Expire after 30-day inactivity
+    # Keep a list of tokens associated with this account
+    cur_list = rdata.get(account)
+    if cur_list is not None:
+        cur_list = json.loads(cur_list.decode('utf-8'))
+    else:
+        cur_list = {}
+    if 'data' not in cur_list:
+        cur_list['data'] = []
+    if token not in cur_list['data']:
+        cur_list['data'].append(token)
+        rdata.set(account, json.dumps(cur_list))
+
+def get_fcm_tokens(account):
+    """Return list of FCM tokens that belong to this account"""
+    ret = []
+    tokens = rdata.get(account)
+    if tokens is None:
+        return None
+    tokens = json.loads(tokens.decode('utf-8'))
+    if 'data' not in tokens:
+        return None
+    for t in tokens['data']:
+        fcm_account = rdata.get(t)
+        if fcm_account is None or account != fcm_account.decode('utf-8'):
+            continue
+        ret.append(t)
+    return ret
 
 @tornado.gen.coroutine
 def send_prices():
@@ -122,7 +154,7 @@ def send_prices():
                     '{"currency":"' + currency.lower() + '","price":' + str(price) + ',"btc":' + str(btc) + ',"nano":' + str(nano) + '}')
             except:
                 print(' > Error pushing prices for client ' + client)
-                logging.error('error pushing prices for client;' + handler.request.remote_ip + ';' + client)
+                logging.error('error pushing prices for client;' + client)
 
 
 @tornado.gen.coroutine
@@ -160,7 +192,7 @@ def pending_defer(handler, request):
 
     if response.error:
         logging.error('pending defer request failure;' + str(
-            response.error) + ';' + rpc_url + ';' + message + ';' + handler.request.remote_ip + ';' + handler.id)
+            response.error) + ';' + rpc_url + ';' + request + ';' + handler.request.remote_ip + ';' + handler.id)
         reply = "pending defer error"
     else:
         data = json.loads(response.body.decode('ascii'))
@@ -192,6 +224,11 @@ def pending_defer(handler, request):
 @tornado.gen.coroutine
 def process_defer(handler, block):
     rpc = tornado.httpclient.AsyncHTTPClient()
+
+    # Let's cache the link because, due to callback delay it's possible a client can receive
+    # a push notification for a block it already knows about
+    if 'link' in block:
+        rdata.set(f"link_{block['link']}", "1", ex=3600)
 
     # check for receive race condition
     # if block['type'] == 'state' and block['previous'] and block['balance'] and block['link']:
@@ -253,10 +290,7 @@ def process_defer(handler, block):
 
 @tornado.gen.coroutine
 def work_request(http_client, body):
-    response = yield http_client.fetch(work_url, method='POST', body=body)
-    # Fallback to RPC if error
-    if response.error:
-        response = yield http_client.fetch(rpc_url, method='POST', body=body)
+    response = yield http_client.fetch(rpc_url, method='POST', body=body)
     raise tornado.gen.Return(response)
 
 
@@ -442,6 +476,9 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             rpc_reconnect(self)
                             rdata.rpush("conntrack",
                                         str(float(time.time())) + ":" + self.id + ":connect:" + self.request.remote_ip)
+                            # Store FCM token if available, for push notifications
+                            if 'fcm_token' in kaliumcast_request:
+                                update_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token'])
                         except Exception as e:
                             logging.error('reconnect error;' + str(e) + ';' + self.request.remote_ip + ';' + self.id)
                             reply = {'error': 'reconnect error', 'detail': str(e)}
@@ -458,6 +495,9 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             rpc_subscribe(self, kaliumcast_request['account'], currency)
                             rdata.rpush("conntrack",
                                         str(float(time.time())) + ":" + self.id + ":connect:" + self.request.remote_ip)
+                            # Store FCM token if available, for push notifications
+                            if 'fcm_token' in kaliumcast_request:
+                                update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token'])
                         except Exception as e:
                             logging.error('subscribe error;' + str(e) + ';' + self.request.remote_ip + ';' + self.id)
                             reply = {'error': 'subscribe error', 'detail': str(e)}
@@ -596,6 +636,34 @@ class Callback(tornado.web.RequestHandler):
                 print("             Pushing to client %s" % subscriptions[link])
                 logging.info('push to client;' + json.dumps(data) + ';' + subscriptions[link])
                 clients[subscriptions[link]].write_message(json.dumps(data))
+            # Push FCM notification if this is a send
+            fcm_tokens = get_fcm_tokens(link)
+            if fcm_tokens is None or len(fcm_tokens) == 0:
+                return
+            rpc = tornado.httpclient.AsyncHTTPClient()
+            response = await rpc_request(rpc, json.dumps({"action":"block", "hash":data['block']['previous']}))
+            if response is None or response.error:
+                return
+            # See if this block was already pocketed
+            cached_hash = rdata.get(f"link_{data['hash']}")
+            if cached_hash is not None:
+                return
+            prev_data = json.loads(response.body.decode('ascii'))
+            prev_data = prev_data['contents'] = json.loads(prev_data['contents'])
+            prev_balance = int(prev_data['contents']['balance'])
+            cur_balance = int(data['block']['balance'])
+            if prev_balance - cur_balance > 0:
+                # This is a send, push notifications
+                fcm = aiofcm.FCM(fcm_sender_id, fcm_api_key)
+                # Send notification with generic title, send amount as body. App should have localizations and use this information at its discretion
+                for t in fcm_tokens:
+                    message = aiofcm.Message(
+                                device_token=t,
+                                data = {
+                                    "amount": str(prev_balance-cur_balance)
+                                }
+                    )
+                    await fcm.send_message(message)
         elif subscriptions.get(data['account']):
             print("             Pushing to client %s" % subscriptions[data['account']])
             logging.info('push to client;' + json.dumps(data) + ';' + subscriptions[data['account']])

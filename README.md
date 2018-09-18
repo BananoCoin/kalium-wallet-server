@@ -22,6 +22,9 @@ On debian-based systems
 sudo apt install redis-server
 ```
 
+## Firebase (FCM)
+For Firebase push-notifications you need to retrieve your firebase legacy API key as well as sender_id
+
 ## Let's Encrypt
 Setup SSL with let's encrypt and cert bot.
 
@@ -48,7 +51,6 @@ pip install -r requirements.txt
 You must configure using environment variables. You may do this manually, as part of a launching script, in your bash settings, or within a systemd service.
 ```
 export BANANO_RPC_URL=http://<host>:<rpcport>
-export BANANO_WORK_URL=http://<host>:<workport>
 export BANANO_CALLBACK_PORT=17072
 export BANANO_SOCKET_PORT=443
 export BANANO_CERT_DIR=/etc/letsencrypt/live/<domain>
@@ -56,7 +58,10 @@ export BANANO_KEY_FILE=privkey.pem
 export BANANO_CRT_FILE=fullchain.pem
 export BANANO_LOG_FILE=/home/<username>/kaliumcast.log
 export BANANO_LOG_LEVEL=INFO
+export FCM_API_KEY=<firebase_api_key>
+export FCM_SENDER_ID<firebase sender id>
 ```
+
 ### Configure node for RPC
 Ensure rpc is enabled as well as control (security over internal wallet is provided in whitelisted commands)
 
@@ -100,7 +105,6 @@ After=network-online.target
 
 [Service]
 Environment=BANANO_RPC_URL=http://<host>:<rpcport>
-Environment=BANANO_WORK_URL=http://<host>:<workport>
 Environment=BANANO_CALLBACK_PORT=17072
 Environment=BANANO_SOCKET_PORT=443
 Environment=BANANO_CERT_DIR=/etc/letsencrypt/live/<domain>
@@ -108,6 +112,8 @@ Environment=BANANO_KEY_FILE=privkey.pem
 Environment=BANANO_CRT_FILE=fullchain.pem
 Environment=BANANO_LOG_FILE=/home/user/kaliumcast.log
 Environment=BANANO_LOG_LEVEL=INFO
+Environment=FCM_API_KEY=<firebase_api_key>
+Environment=FCM_SENDER_ID<firebase sender id>
 LimitNOFILE=65536
 ExecStart=/usr/local/bin/python3.6 /home/user/kaliumcast/kaliumcast.py
 Restart=always
