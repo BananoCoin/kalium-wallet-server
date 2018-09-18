@@ -302,6 +302,9 @@ def work_defer(handler, message):
         return
     else:
         active_work.add(request['hash'])
+        request['use_peers'] = True
+        message = json.dumps(request)
+        active_work.add(request['hash'])
     try:
         rpc = tornado.httpclient.AsyncHTTPClient()
         response = yield work_request(rpc, message)
