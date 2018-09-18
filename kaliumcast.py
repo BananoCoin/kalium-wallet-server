@@ -475,7 +475,6 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                                 else:
                                     sub_pref_cur[self.id] = 'usd'
                                     rdata.hset(self.id, "currency", 'usd')
-
                             rpc_reconnect(self)
                             rdata.rpush("conntrack",
                                         str(float(time.time())) + ":" + self.id + ":connect:" + self.request.remote_ip)
@@ -655,7 +654,9 @@ class Callback(tornado.web.RequestHandler):
             prev_data = prev_data['contents'] = json.loads(prev_data['contents'])
             prev_balance = int(prev_data['contents']['balance'])
             cur_balance = int(data['block']['balance'])
-            if prev_balance - cur_balance > 0:
+            send_amount = prev_balance - cur_balance
+            # Only care about trans >= 1 BANOSHI
+            if send_amount >= 1000000000000000000000000000:
                 # This is a send, push notifications
                 fcm = aiofcm.FCM(fcm_sender_id, fcm_api_key)
                 # Send notification with generic title, send amount as body. App should have localizations and use this information at its discretion
@@ -663,7 +664,7 @@ class Callback(tornado.web.RequestHandler):
                     message = aiofcm.Message(
                                 device_token=t,
                                 data = {
-                                    "amount": str(prev_balance-cur_balance)
+                                    "amount": str(send_amount)
                                 }
                     )
                     await fcm.send_message(message)
