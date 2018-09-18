@@ -301,7 +301,6 @@ def work_defer(handler, message):
         logging.error('work already requested;' + handler.request.remote_ip + ';' + handler.id)
         return
     else:
-        active_work.add(request['hash'])
         request['use_peers'] = True
         message = json.dumps(request)
         active_work.add(request['hash'])
