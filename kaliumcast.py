@@ -371,9 +371,15 @@ def rpc_reconnect(handler):
         handler.write_message('{"error":"reconnect error","detail":"account not seen on this server before"}')
         return
 
-    message = '{\"action\":\"account_info",\"account\":\"' + account + '\",\"pending\":true,\"representative\":true}'
-    logging.info('sending request;' + message + ';' + handler.request.remote_ip + ';' + handler.id)
-    response = yield rpc_request(rpc, message)
+    message = {
+        "action":"account_info",
+        "account":account,
+        "pending":True,
+        "representative":True
+    }
+    request = json.dumps(message)
+    logging.info('sending request;' + request + ';' + handler.request.remote_ip + ';' + handler.id)
+    response = yield rpc_request(rpc, request)
 
     if response.error:
         logging.error('reconnect error;' + handler.request.remote_ip + ';' + handler.id)
