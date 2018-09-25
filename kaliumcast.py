@@ -106,7 +106,7 @@ def update_fcm_token_for_account(account, token):
     # Keep a list of tokens associated with this account
     cur_list = rdata.get(account)
     if cur_list is not None:
-        cur_list = json.loads(cur_list.decode('utf-8'))
+        cur_list = json.loads(cur_list.decode('utf-8').replace('\'', '"'))
     else:
         cur_list = {}
     if 'data' not in cur_list:
@@ -120,7 +120,7 @@ def get_fcm_tokens(account):
     tokens = rdata.get(account)
     if tokens is None:
         return None
-    tokens = json.loads(tokens.decode('utf-8'))
+    tokens = json.loads(tokens.decode('utf-8').replace('\'', '"'))
     # Rebuild the list for this account removing tokens that dont belong anymore
     new_token_list = {}
     new_token_list['data'] = []
@@ -374,8 +374,8 @@ def rpc_reconnect(handler):
     message = {
         "action":"account_info",
         "account":account,
-        "pending":"true",
-        "representative":"true"
+        "pending":True,
+        "representative":True
     }
     request = json.dumps(message)
     logging.info('sending request;' + request + ';' + handler.request.remote_ip + ';' + handler.id)
@@ -494,7 +494,8 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                         except Exception as e:
                             logging.error('reconnect error;' + str(e) + ';' + self.request.remote_ip + ';' + self.id)
                             reply = {'error': 'reconnect error', 'detail': str(e)}
-                            if requestid is not None: reply['request_id'] = requestid
+                            if requestid is not None:
+                                reply['request_id'] = requestid
                             self.write_message(json.dumps(reply))
                     # new user, setup uuid(or use existing if available) and account info
                     else:
