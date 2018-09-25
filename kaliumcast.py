@@ -374,8 +374,8 @@ def rpc_reconnect(handler):
     message = {
         "action":"account_info",
         "account":account,
-        "pending":True,
-        "representative":True
+        "pending":"true",
+        "representative":"true"
     }
     request = json.dumps(message)
     logging.info('sending request;' + request + ';' + handler.request.remote_ip + ';' + handler.id)
