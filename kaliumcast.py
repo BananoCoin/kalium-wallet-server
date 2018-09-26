@@ -254,12 +254,16 @@ def send_process_defer(handler, block):
 
     # Generate work
 
-    work_request = {
+    work_request_body = {
         "action":"work_generate",
         "hash":block['previous']
     }
+
     try:
-        work = yield work_defer(rpc, json.dumps(work_request))
+        work = yield work_request(rpc, json.dumps(work_request_body))
+        if work.error:
+            handler.write_message('{"error":"Failed work_generate request"}')
+            return
         work = json.loads(work.body.decode('ascii'))
         block['work'] = work['work']
     except Exception:
@@ -341,41 +345,35 @@ def process_defer(handler, block):
         'block': json.dumps(block)
     }))
 
-
 @tornado.gen.coroutine
 def work_request(http_client, body):
-    request = json.loads(body)
-    try:
-        if request['hash'] in active_work:
-            logging.error('work already requested for hash:' + request['hash'])
-            return
-        else:
-            request['use_peers'] = True
-            body = json.dumps(request)
-            active_work.add(request['hash'])
-        response = yield http_client.fetch(rpc_url, method='POST', body=body)
-        if response.error:
-            active_work.remove(request['hash'])
-            raise Exception("work request error")
-        else:
-            active_work.remove(request['hash'])
-        raise tornado.gen.Return(response)
-    except Exception:
-        active_work.remove(request['hash'])
-        raise Exception("work request error")
+    response = yield http_client.fetch(rpc_url, method='POST', body=body)
+    raise tornado.gen.Return(response)
 
 @tornado.gen.coroutine
 def work_defer(handler, message):
+    request = json.loads(message)
+    if request['hash'] in active_work:
+        logging.error('work already requested;' + handler.request.remote_ip + ';' + handler.id)
+        return
+    else:
+        active_work.add(request['hash'])
     try:
         rpc = tornado.httpclient.AsyncHTTPClient()
         response = yield work_request(rpc, message)
         logging.info('work request return code;' + str(response.code))
-        logging.info('work defer response sent:;' + str(
-            strclean(response.body)) + ';' + handler.request.remote_ip + ';' + handler.id)
-        handler.write_message(response.body)
+        if response.error:
+            logging.error('work defer error;' + handler.request.remote_ip + ';' + handler.id)
+            handler.write_message("work defer error")
+        else:
+            logging.info('work defer response sent:;' + str(
+                strclean(response.body)) + ';' + handler.request.remote_ip + ';' + handler.id)
+            handler.write_message(response.body)
+        active_work.remove(request['hash'])
     except:
         logging.error(
             'work defer exception;' + str(sys.exc_info()) + ';' + handler.request.remote_ip + ';' + handler.id)
+        active_work.remove(request['hash'])
 
 @tornado.gen.coroutine
 def rpc_subscribe(handler, account, currency):
