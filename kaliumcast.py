@@ -235,20 +235,22 @@ def send_process_defer(handler, block):
 
     try:
         prev_response = yield rpc_request(rpc, json.dumps({
-                'action': 'blocks_info',
-                'hashes': [block['previous']],
-                'balance': 'true'
+                'action': 'block',
+                'hash': [block['previous']]
         }))
-    except Exception:
-        handler.write_message('{"error":"Invalid blocks info response"}')
+    except Exception as e:
+        logging.exception(e)
+        handler.write_message('{"error":"Invalid block info response"}')
         return
 
     prev_response = json.loads(prev_response.body.decode('ascii'))
 
-    if 'balance' not in prev_response:
-        handler.write_message('{"error":"Invalid blocks info response"}')
+    if 'contents' not in prev_response:
+        logging.info('invalid blocks_info response;' + json.dumps(prev_response))
+        handler.write_message('{"error":"Invalid block info response (missing contents)"}')
         return
 
+    prev_response = json.loads(prev_response['contents'])
     balance_after_send = int(prev_response['balance']) - int(block['balance'])
     block['balance'] = balance_after_send
 
