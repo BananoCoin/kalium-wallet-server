@@ -301,7 +301,7 @@ def process_defer(handler, block, do_work):
             if 'work' not in work_response:
                 handler.write_message('{"error":"work response came back empty"}')
                 return
-            block['work'] = work_response['error']
+            block['work'] = work_response['work']
         except Exception as e:
             logging.exception(e)
             handler.write_message('{"error":"Failed work_generate in process request"}')
