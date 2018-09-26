@@ -315,9 +315,12 @@ def process_defer(handler, block, do_work):
 
 @tornado.gen.coroutine
 def work_request(http_client, body):
-    response = yield http_client.fetch(rpc_url, method='POST', body=body)
+    # Inject use_peers option into request
+    request = json.loads(body)
+    if 'use_peers' not in request:
+        request['use_peers'] = True
+    response = yield http_client.fetch(rpc_url, method='POST', body=json.dumps(request))
     raise tornado.gen.Return(response)
-
 
 @tornado.gen.coroutine
 def work_defer(handler, message):
@@ -326,8 +329,6 @@ def work_defer(handler, message):
         logging.error('work already requested;' + handler.request.remote_ip + ';' + handler.id)
         return
     else:
-        request['use_peers'] = True
-        message = json.dumps(request)
         active_work.add(request['hash'])
     try:
         rpc = tornado.httpclient.AsyncHTTPClient()
@@ -335,7 +336,8 @@ def work_defer(handler, message):
         logging.info('work request return code;' + str(response.code))
         if response.error:
             logging.error('work defer error;' + handler.request.remote_ip + ';' + handler.id)
-            handler.write_message("work defer error")
+            handler.write_message('{"error":"work defer error"}')
+            return
         else:
             logging.info('work defer response sent:;' + str(
                 strclean(response.body)) + ';' + handler.request.remote_ip + ';' + handler.id)
