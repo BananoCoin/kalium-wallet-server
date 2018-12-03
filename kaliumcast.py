@@ -50,7 +50,7 @@ allowed_rpc_actions = ["account_balance", "account_block_count", "account_check"
 # all currencies polled on CMC
 currency_list = ["BTC", "AUD", "BRL", "CAD", "CHF", "CLP", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD", "HUF", "IDR",
                  "ILS", "INR", "JPY", "KRW", "MXN", "MYR", "NOK", "NZD", "PHP", "PKR", "PLN", "RUB", "SEK", "SGD",
-                 "THB", "TRY", "TWD", "USD", "ZAR"]
+                 "THB", "TRY", "TWD", "USD", "VES", "ZAR"]
 
 # ephemeral data
 clients = {}  # store websocket sessions
@@ -146,15 +146,15 @@ def send_prices():
     if len(clients):
         print('[' + str(int(time.time())) + '] Pushing price data to ' + str(len(clients)) + ' subscribers...')
         logging.info('pushing price data to ' + str(len(clients)) + ' connections')
-        btc = float(rdata.hget("prices", "creeper:banano-btc").decode('utf-8'))
-        nano = float(rdata.hget("prices", "creeper:banano-nano").decode('utf-8'))
+        btc = float(rdata.hget("prices", "coingecko:banano-btc").decode('utf-8'))
+        nano = float(rdata.hget("prices", "coingecko:banano-nano").decode('utf-8'))
         for client in clients:
             try:
                 try:
                     currency = sub_pref_cur[client]
                 except:
                     currency = 'usd'
-                price = float(rdata.hget("prices", "creeper:banano-" + currency.lower()).decode('utf-8'))
+                price = float(rdata.hget("prices", "coingecko:banano-" + currency.lower()).decode('utf-8'))
 
                 clients[client].write_message(
                     '{"currency":"' + currency.lower() + '","price":' + str(price) + ',"btc":' + str(btc) + ',"nano":' + str(nano) + '}')
@@ -386,9 +386,9 @@ def rpc_subscribe(handler, account, currency):
         rdata.hset(handler.id, "last-connect", float(time.time()))
         info = json.loads(response.body)
         info['uuid'] = handler.id
-        price_cur = rdata.hget("prices", "creeper:banano-" + sub_pref_cur[handler.id].lower()).decode('utf-8')
-        price_btc = rdata.hget("prices", "creeper:banano-btc").decode('utf-8')
-        price_nano = rdata.hget("prices", "creeper:banano-nano").decode('utf-8')
+        price_cur = rdata.hget("prices", "coingecko:banano-" + sub_pref_cur[handler.id].lower()).decode('utf-8')
+        price_btc = rdata.hget("prices", "coingecko:banano-btc").decode('utf-8')
+        price_nano = rdata.hget("prices", "coingecko:banano-nano").decode('utf-8')
         info['currency'] = sub_pref_cur[handler.id].lower()
         info['price'] = price_cur
         info['btc'] = price_btc
@@ -430,9 +430,9 @@ def rpc_reconnect(handler):
         sub_pref_cur[handler.id] = rdata.hget(handler.id, "currency").decode('utf-8')
         rdata.hset(handler.id, "last-connect", float(time.time()))
         info = json.loads(response.body.decode('ascii'))
-        price_cur = rdata.hget("prices", "creeper:banano-" + sub_pref_cur[handler.id].lower()).decode('utf-8')
-        price_btc = rdata.hget("prices", "creeper:banano-btc").decode('utf-8')
-        price_nano = rdata.hget("prices", "creeper:banano-nano").decode('utf-8')
+        price_cur = rdata.hget("prices", "coingecko:banano-" + sub_pref_cur[handler.id].lower()).decode('utf-8')
+        price_btc = rdata.hget("prices", "coingecko:banano-btc").decode('utf-8')
+        price_nano = rdata.hget("prices", "coingecko:banano-nano").decode('utf-8')
         info['currency'] = sub_pref_cur[handler.id].lower()
         info['price'] = float(price_cur)
         info['btc'] = float(price_btc)
@@ -564,7 +564,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                         if kaliumcast_request['currency'].upper() in currency_list:
                             try:
                                 price = rdata.hget("prices",
-                                                   "creeper:banano-" + kaliumcast_request['currency'].lower()).decode(
+                                                   "coingecko:banano-" + kaliumcast_request['currency'].lower()).decode(
                                     'utf-8')
                                 self.write_message(
                                     '{"currency":"' + kaliumcast_request['currency'].lower() + '","price":' + str(
