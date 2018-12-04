@@ -23,7 +23,7 @@ def coingecko():
 			print("Failed to get price for BANANO-"+currency.upper()+" Error")
 	# Convert to VES
 	usdprice = float(rdata.hget("prices", "coingecko:banano-usd").decode('utf-8'))
-	bolivarprice = float(rdata.hget("prices", "openexchange:usd-vefblkmkt").decode('utf-8'))
+	bolivarprice = float(rdata.hget("prices", "dolartoday:usd-ves").decode('utf-8'))
 	convertedves = usdprice * bolivarprice
 	rdata.hset("prices", "coingecko:banano-ves", f"{convertedves:.16f}")
 	print("Coingecko BANANO-VES", rdata.hget("prices", "coingecko:banano-ves").decode('utf-8'))
