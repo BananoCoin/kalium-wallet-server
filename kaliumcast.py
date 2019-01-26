@@ -540,8 +540,8 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             # Store FCM token if available, for push notifications
                             if 'fcm_token' in kaliumcast_request:
                                 update_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token'])
-                            elif 'fcm_token_v2' in kaliumcast_request and 'enabled' in kaliumcast_request:
-                                if kaliumcast_request['enabled']:
+                            elif 'fcm_token_v2' in kaliumcast_request and 'notification_enabled' in kaliumcast_request:
+                                if kaliumcast_request['notification_enabled']:
                                     update_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token_v2'], v2=True)
                                 else:
                                     delete_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token_v2'])                                
@@ -565,8 +565,8 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             # Store FCM token if available, for push notifications
                             if 'fcm_token' in kaliumcast_request:
                                 update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token'])
-                            elif 'fcm_token_v2' in kaliumcast_request and 'enabled' in kaliumcast_request:
-                                if kaliumcast_request['enabled']:
+                            elif 'fcm_token_v2' in kaliumcast_request and 'notification_enabled' in kaliumcast_request:
+                                if kaliumcast_request['notification_enabled']:
                                     update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token_v2'], v2=True)
                                 else:
                                     delete_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token_v2'])
