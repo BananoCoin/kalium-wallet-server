@@ -536,7 +536,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             if 'fcm_token' in kaliumcast_request:
                                 update_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token'])
                             elif 'fcm_token_v2' in kaliumcast_request:
-                                update_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token_v2'])
+                                update_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token_v2'], v2=True)
                         except Exception as e:
                             logging.error('reconnect error;' + str(e) + ';' + self.request.remote_ip + ';' + self.id)
                             reply = {'error': 'reconnect error', 'detail': str(e)}
@@ -558,7 +558,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             if 'fcm_token' in kaliumcast_request:
                                 update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token'])
                             elif 'fcm_token_v2' in kaliumcast_request:
-                                update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token_v2'])
+                                update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token_v2'], v2=True)
                         except Exception as e:
                             logging.error('subscribe error;' + str(e) + ';' + self.request.remote_ip + ';' + self.id)
                             reply = {'error': 'subscribe error', 'detail': str(e)}
