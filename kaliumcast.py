@@ -26,6 +26,8 @@ from bitstring import BitArray
 # future use for pending blocks for accounts, cached work
 # racct   = redis.StrictRedis(host='localhost', port=6379, db=1)
 
+# Used for FCM v2 tokens
+rfcm = redis.StrictRedis(host='localhost', port=6379, db=1)
 rdata = redis.StrictRedis(host='localhost', port=6379, db=2)  # used for price data and subscriber uuid info
 
 # get environment
@@ -101,11 +103,12 @@ def strclean(instr):
     elif type(instr) is bytes:
         return ' '.join(instr.decode('utf-8').split())
 
-def update_fcm_token_for_account(account, token):
+def update_fcm_token_for_account(account, token, v2=False):
     """Store device FCM registration tokens in redis"""
-    rdata.set(token, account, ex=2592000) # Expire after 30-day inactivity
+    redisInst = rfcm if v2 else rdata
+    redisInst.set(token, account, ex=2592000) # Expire after 30-day inactivity
     # Keep a list of tokens associated with this account
-    cur_list = rdata.get(account)
+    cur_list = redisInst.get(account)
     if cur_list is not None:
         cur_list = json.loads(cur_list.decode('utf-8').replace('\'', '"'))
     else:
@@ -114,11 +117,12 @@ def update_fcm_token_for_account(account, token):
         cur_list['data'] = []
     if token not in cur_list['data']:
         cur_list['data'].append(token)
-    rdata.set(account, json.dumps(cur_list))
+    redisInst.set(account, json.dumps(cur_list))
 
-def get_fcm_tokens(account):
+def get_fcm_tokens(account, v2=False):
     """Return list of FCM tokens that belong to this account"""
-    tokens = rdata.get(account)
+    redisInst = rfcm if v2 else rdata
+    tokens = redisInst.get(account)
     if tokens is None:
         return None
     tokens = json.loads(tokens.decode('utf-8').replace('\'', '"'))
@@ -128,13 +132,13 @@ def get_fcm_tokens(account):
     if 'data' not in tokens:
         return None
     for t in tokens['data']:
-        fcm_account = rdata.get(t)
+        fcm_account = redisInst.get(t)
         if fcm_account is None:
             continue
         elif account != fcm_account.decode('utf-8'):
             continue
         new_token_list['data'].append(t)
-    rdata.set(account, new_token_list)
+    redisInst.set(account, new_token_list)
     return new_token_list['data']
 
 @tornado.gen.coroutine
@@ -531,6 +535,8 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             # Store FCM token if available, for push notifications
                             if 'fcm_token' in kaliumcast_request:
                                 update_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token'])
+                            elif 'fcm_token_v2' in kaliumcast_request:
+                                update_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token_v2'])
                         except Exception as e:
                             logging.error('reconnect error;' + str(e) + ';' + self.request.remote_ip + ';' + self.id)
                             reply = {'error': 'reconnect error', 'detail': str(e)}
@@ -551,6 +557,8 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             # Store FCM token if available, for push notifications
                             if 'fcm_token' in kaliumcast_request:
                                 update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token'])
+                            elif 'fcm_token_v2' in kaliumcast_request:
+                                update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token_v2'])
                         except Exception as e:
                             logging.error('subscribe error;' + str(e) + ';' + self.request.remote_ip + ';' + self.id)
                             reply = {'error': 'subscribe error', 'detail': str(e)}
@@ -673,6 +681,19 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                 break
 
 
+class BananoConversions():
+    # 1 BANANO = 10e29 RAW
+    RAW_PER_BAN = 10 ** 29
+
+    @classmethod
+    def raw_to_banano(self, raw_amt):
+        return raw_amt / self.RAW_PER_BAN
+
+    @staticmethod
+    def banano_to_raw(ban_amt):
+        expanded = float(ban_amt) * 100
+        return int(expanded) * (10 ** 27)
+
 class Callback(tornado.web.RequestHandler):
     async def post(self):
         data = self.request.body.decode('utf-8')
@@ -694,7 +715,8 @@ class Callback(tornado.web.RequestHandler):
                 clients[subscriptions[link]].write_message(json.dumps(data))
             # Push FCM notification if this is a send
             fcm_tokens = get_fcm_tokens(link)
-            if fcm_tokens is None or len(fcm_tokens) == 0:
+            fcm_tokens_v2 = get_fcm_tokens(link, v2=True)
+            if (fcm_tokens is None or len(fcm_tokens) == 0) and (fcm_tokens_v2 is None or len(fcm_tokens_v2) == 0):
                 return
             rpc = tornado.httpclient.AsyncHTTPClient()
             response = await rpc_request(rpc, json.dumps({"action":"block", "hash":data['block']['previous']}))
@@ -716,11 +738,24 @@ class Callback(tornado.web.RequestHandler):
                 # Send notification with generic title, send amount as body. App should have localizations and use this information at its discretion
                 for t in fcm_tokens:
                     message = aiofcm.Message(
-                                device_token=t,
-                                data = {
-                                    "amount": str(send_amount)
-                                },
-                                priority=aiofcm.PRIORITY_HIGH
+                        device_token=t,
+                        data = {
+                            "amount": str(send_amount)
+                        },
+                        priority=aiofcm.PRIORITY_HIGH
+                    )
+                    await fcm.send_message(message)
+                notification_title = f"Received {BananoConversions.raw_to_banano(send_amount)} BANANO"
+                notification_body = "Open Kalium to view this transaction."
+                for t2 in fcm_tokens_v2:
+                    message = aiofcm.Message(
+                        device_token = t2,
+                        notification = {
+                            "title":notification_title,
+                            "body":notification_body,
+                            "sound":"default"
+                        },
+                        priority=aiofcm.PRIORITY_HIGH
                     )
                     await fcm.send_message(message)
         elif subscriptions.get(data['account']):
