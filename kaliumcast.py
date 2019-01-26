@@ -690,7 +690,9 @@ class BananoConversions():
 
     @classmethod
     def raw_to_banano(self, raw_amt):
-        return raw_amt / self.RAW_PER_BAN
+        banano_amt = raw_amt / self.RAW_PER_BAN
+        # Format to have optional decimals
+        return "{0}".format(str(round(banano_amt, 2) if banano_amt % 2 else int(banano_amt)))
 
     @staticmethod
     def banano_to_raw(ban_amt):
