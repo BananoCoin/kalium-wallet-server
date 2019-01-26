@@ -689,10 +689,21 @@ class BananoConversions():
     RAW_PER_BAN = 10 ** 29
 
     @classmethod
+    def minimalNumber(self, x):
+        if type(x) is str:
+            if x == '':
+                x = 0
+        f = float(x)
+        if f.is_integer():
+            return int(f)
+        else:
+            return round(f, 2)
+
+    @classmethod
     def raw_to_banano(self, raw_amt):
         banano_amt = raw_amt / self.RAW_PER_BAN
         # Format to have optional decimals
-        return banano_amt
+        return self.minimalNumber(banano_amt)
 
     @staticmethod
     def banano_to_raw(ban_amt):
@@ -750,8 +761,7 @@ class Callback(tornado.web.RequestHandler):
                         priority=aiofcm.PRIORITY_HIGH
                     )
                     await fcm.send_message(message)
-                banano_amt = BananoConversions.raw_to_banano(send_amount)
-                notification_title = "Received {0} BANANO".format(str(round(banano_amt, 2) if banano_amt % 2 else int(banano_amt)))
+                notification_title = f"Received {BananoConversions.raw_to_banano(send_amount)} BANANO"
                 notification_body = "Open Kalium to view this transaction."
                 for t2 in fcm_tokens_v2:
                     message = aiofcm.Message(
