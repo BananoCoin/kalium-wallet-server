@@ -47,7 +47,7 @@ allowed_rpc_actions = ["account_balance", "account_block_count", "account_check"
                        "block_create", "blocks", "blocks_info", "block_account", "block_count", "block_count_type",
                        "chain", "delegators", "delegators_count", "frontiers", "frontier_count", "history",
                        "key_expand", "process", "representatives", "republish", "peers", "version", "pending",
-                       "pending_exists", "price_data", "work_generate"]
+                       "pending_exists", "price_data", "work_generate", "fcm_update"]
 
 # all currencies polled on CMC
 currency_list = ["BTC", "AUD", "BRL", "CAD", "CHF", "CLP", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD", "HUF", "IDR",
@@ -564,7 +564,10 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             reply = {'error': 'subscribe error', 'detail': str(e)}
                             if requestid is not None: reply['request_id'] = requestid
                             self.write_message(json.dumps(reply))
-
+                elif kaliumcast_request['action'] == "account_subscribe":
+                    # Updating FCM token
+                    if 'fcm_token_v2' in kaliumcast_request and 'account' in kaliumcast_request:
+                        update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token_v2'], v2=True)
                 # rpc: price_data
                 elif kaliumcast_request['action'] == "price_data":
                     logging.info('price data request;' + self.request.remote_ip + ';' + self.id)
