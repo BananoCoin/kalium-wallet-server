@@ -564,7 +564,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             reply = {'error': 'subscribe error', 'detail': str(e)}
                             if requestid is not None: reply['request_id'] = requestid
                             self.write_message(json.dumps(reply))
-                elif kaliumcast_request['action'] == "account_subscribe":
+                elif kaliumcast_request['action'] == "fcm_update":
                     # Updating FCM token
                     if 'fcm_token_v2' in kaliumcast_request and 'account' in kaliumcast_request:
                         update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token_v2'], v2=True)
