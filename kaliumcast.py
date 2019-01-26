@@ -750,7 +750,7 @@ class Callback(tornado.web.RequestHandler):
                         priority=aiofcm.PRIORITY_HIGH
                     )
                     await fcm.send_message(message)
-                ban_amount = BananoConversions.raw_to_banano(send_amount)
+                banano_amount = BananoConversions.raw_to_banano(send_amount)
                 notification_title = "Received {0} BANANO".format(str(round(banano_amt, 2) if banano_amt % 2 else int(banano_amt)))
                 notification_body = "Open Kalium to view this transaction."
                 for t2 in fcm_tokens_v2:
