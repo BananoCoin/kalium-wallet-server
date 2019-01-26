@@ -103,6 +103,11 @@ def strclean(instr):
     elif type(instr) is bytes:
         return ' '.join(instr.decode('utf-8').split())
 
+def delete_fcm_token_for_account(account, token):
+    rfcm.delete(token)
+    # Delete all tokens associated with this account
+    rfcm.set(account, json.dumps({'data': []}))
+
 def update_fcm_token_for_account(account, token, v2=False):
     """Store device FCM registration tokens in redis"""
     redisInst = rfcm if v2 else rdata
@@ -535,8 +540,11 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             # Store FCM token if available, for push notifications
                             if 'fcm_token' in kaliumcast_request:
                                 update_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token'])
-                            elif 'fcm_token_v2' in kaliumcast_request:
-                                update_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token_v2'], v2=True)
+                            elif 'fcm_token_v2' in kaliumcast_request and 'enabled' in kaliumcast_request:
+                                if kaliumcast_request['enabled']:
+                                    update_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token_v2'], v2=True)
+                                else:
+                                    delete_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token_v2'])                                
                         except Exception as e:
                             logging.error('reconnect error;' + str(e) + ';' + self.request.remote_ip + ';' + self.id)
                             reply = {'error': 'reconnect error', 'detail': str(e)}
@@ -557,8 +565,11 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             # Store FCM token if available, for push notifications
                             if 'fcm_token' in kaliumcast_request:
                                 update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token'])
-                            elif 'fcm_token_v2' in kaliumcast_request:
-                                update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token_v2'], v2=True)
+                            elif 'fcm_token_v2' in kaliumcast_request and 'enabled' in kaliumcast_request:
+                                if kaliumcast_request['enabled']:
+                                    update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token_v2'], v2=True)
+                                else:
+                                    delete_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token_v2'])
                         except Exception as e:
                             logging.error('subscribe error;' + str(e) + ';' + self.request.remote_ip + ';' + self.id)
                             reply = {'error': 'subscribe error', 'detail': str(e)}
@@ -566,8 +577,11 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                             self.write_message(json.dumps(reply))
                 elif kaliumcast_request['action'] == "fcm_update":
                     # Updating FCM token
-                    if 'fcm_token_v2' in kaliumcast_request and 'account' in kaliumcast_request:
-                        update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token_v2'], v2=True)
+                    if 'fcm_token_v2' in kaliumcast_request and 'account' in kaliumcast_request and 'enabled' in kaliumcast_request:
+                        if kaliumcast_request['enabled']:
+                            update_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token_v2'], v2=True)
+                        else:
+                            delete_fcm_token_for_account(kaliumcast_request['account'], kaliumcast_request['fcm_token_v2'])
                 # rpc: price_data
                 elif kaliumcast_request['action'] == "price_data":
                     logging.info('price data request;' + self.request.remote_ip + ';' + self.id)
