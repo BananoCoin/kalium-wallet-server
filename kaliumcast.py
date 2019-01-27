@@ -783,7 +783,8 @@ class Callback(tornado.web.RequestHandler):
                         notification = {
                             "title":notification_title,
                             "body":notification_body,
-                            "sound":"default"
+                            "sound":"default",
+                            "tag":link
                         },
                         priority=aiofcm.PRIORITY_HIGH
                     )
