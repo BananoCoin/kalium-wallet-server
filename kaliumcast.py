@@ -129,13 +129,13 @@ def get_fcm_tokens(account, v2=False):
     redisInst = rfcm if v2 else rdata
     tokens = redisInst.get(account)
     if tokens is None:
-        return None
+        return []
     tokens = json.loads(tokens.decode('utf-8').replace('\'', '"'))
     # Rebuild the list for this account removing tokens that dont belong anymore
     new_token_list = {}
     new_token_list['data'] = []
     if 'data' not in tokens:
-        return None
+        return []
     for t in tokens['data']:
         fcm_account = redisInst.get(t)
         if fcm_account is None:
