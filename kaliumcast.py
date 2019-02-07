@@ -17,7 +17,7 @@ import logging
 import os
 import sys
 
-from logging.handlers import WatchedFileHandler
+from logging.handlers import WatchedFileHandler, TimedRotatingFileHandler
 from bitstring import BitArray
 
 # future use for caching blocks
@@ -834,6 +834,7 @@ if __name__ == "__main__":
     root = logging.getLogger()
     root.setLevel(os.environ.get("BANANO_LOG_LEVEL", "INFO"))
     root.addHandler(handler)
+    root.addHandler(TimedRotatingFileHandler(os.environ.get("BANANO_LOG_FILE", "kaliumcast.log"), when="d", interval=1, backupCount=100))
     print("[" + str(int(time.time())) + "] Starting KALIUMCast Server...")
     logging.info('Starting KALIUMCast Server')
     logging.getLogger('tornado.access').disabled = True
