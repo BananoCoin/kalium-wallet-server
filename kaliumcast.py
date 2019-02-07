@@ -537,8 +537,8 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                     # If account doesnt match the uuid self-heal
                     resubscribe = True
                     if 'uuid' in kaliumcast_request and 'account' in kaliumcast_request:
-                        account = rdata.hget(self.id, "account").decode('utf-8')
-                        if account is None or account.lower() != kaliumcast_request['account'].lower():
+                        account = rdata.hget(kaliumcast_request['uuid'], "account")
+                        if account is None or account.decode('utf-8').lower() != kaliumcast_request['account'].lower():
                             resubscribe = False
                     # already subscribed, reconnect
                     if 'uuid' in kaliumcast_request and resubscribe:
