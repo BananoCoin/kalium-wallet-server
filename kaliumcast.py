@@ -435,6 +435,8 @@ def get_pending_count(handler, account):
         "threshold":str(10**27),
         "count":51
     }
+    request = json.dumps(message)
+    rpc = tornado.httpclient.AsyncHTTPClient()
     logging.info('sending request;' + request + ';' + handler.request.remote_ip + ';' + handler.id)
     response = yield rpc_request(rpc, request)
     if response.error:
