@@ -420,11 +420,27 @@ def rpc_subscribe(handler, account, currency):
         info['price'] = price_cur
         info['btc'] = price_btc
         info['nano'] = price_nano
+        info['pending_count'] = yield get_pending_count(handler, account)
         info = json.dumps(info)
         logging.info('subscribe response sent;' + str(
             strclean(response.body)) + ';' + handler.request.remote_ip + ';' + handler.id)
         handler.write_message(info)
 
+@tornado.gen.coroutine
+def get_pending_count(handler, account):
+    # Get pending block count
+    message = {
+        "action":"pending",
+        "account":account,
+        "threshold":str(10**27),
+        "count":51
+    }
+    logging.info('sending request;' + request + ';' + handler.request.remote_ip + ';' + handler.id)
+    response = yield rpc_request(rpc, request)
+    if response.error:
+        return 0
+    pending = json.loads(response.body.decode('ascii'))
+    return len(pending['blocks'])
 
 @tornado.gen.coroutine
 def rpc_reconnect(handler):
@@ -464,6 +480,7 @@ def rpc_reconnect(handler):
         info['price'] = float(price_cur)
         info['btc'] = float(price_btc)
         info['nano'] = float(price_nano)
+        info['pending_count'] = yield get_pending_count(handler, account)
         info = json.dumps(info)
 
         logging.info(
