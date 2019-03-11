@@ -30,6 +30,7 @@ from bitstring import BitArray
 rfcm = redis.StrictRedis(host='localhost', port=6379, db=1)
 rdata = redis.StrictRedis(host='localhost', port=6379, db=2)  # used for price data and subscriber uuid info
 
+
 # get environment
 rpc_url = os.getenv('BANANO_RPC_URL', 'http://127.0.0.1:7072')  # use env, else default to localhost rpc port
 callback_port = os.getenv('BANANO_CALLBACK_PORT', 17072)
@@ -104,32 +105,12 @@ def strclean(instr):
         return ' '.join(instr.decode('utf-8').split())
 
 def delete_fcm_token_for_account(account, token):
-    tokens = rfcm.get(account)
-    if tokens is None:
-        return None
-    tokens = json.loads(tokens.decode('utf-8').replace('\'', '"'))
-    # Rebuild the list for this account removing the token that doesn't belong anymore
-    new_token_list = {}
-    new_token_list['data'] = []
-    if 'data' not in tokens:
-        return None
-    for t in tokens['data']:
-        fcm_account = rfcm.get(t)
-        if fcm_account is None:
-            continue
-        elif account != fcm_account.decode('utf-8'):
-            continue
-        if t != token:
-            new_token_list['data'].append(t)
-        else:
-            rfcm.delete(t)
-    rfcm.set(account, new_token_list)
-    return new_token_list['data']
+    rfcm.delete(token)
 
 def update_fcm_token_for_account(account, token, v2=False):
     """Store device FCM registration tokens in redis"""
     redisInst = rfcm if v2 else rdata
-    redisInst.set(token, account, ex=2592000) # Expire after 30-day inactivity
+    set_or_upgrade_token_account_list(account, token, v2=v2)
     # Keep a list of tokens associated with this account
     cur_list = redisInst.get(account)
     if cur_list is not None:
@@ -141,6 +122,38 @@ def update_fcm_token_for_account(account, token, v2=False):
     if token not in cur_list['data']:
         cur_list['data'].append(token)
     redisInst.set(account, json.dumps(cur_list))
+
+def get_or_upgrade_token_account_list(account, token, v2=False):
+    redisInst = rfcm if v2 else rdata
+    curTokenList = redisInst.get(token)
+    if curTokenList is None:
+        []
+    else:
+        try:
+            curToken = json.loads(curTokenList.decode('utf-8'))
+            return curToken
+        except Exception as e:
+            curToken = curTokenList.decode('utf-8')
+            redisInst.set(token, json.dumps([curToken]), ex=2592000)
+            if account != curToken:
+                return []
+    return json.loads(redisInst.get(token).decode('utf-8'))
+
+def set_or_upgrade_token_account_list(account, token, v2=False):
+    redisInst = rfcm if v2 else rdata
+    curTokenList = redisInst.get(token)
+    if curTokenList is None:
+        redisInst.set(token, json.dumps([account]), ex=2592000) 
+    else:
+        try:
+            curToken = json.loads(curTokenList.decode('utf-8'))
+            if account not in curToken:
+                curToken.append(account)
+                redisInst.set(token, json.dumps(curToken), ex=2592000)
+        except Exception as e:
+            curToken = curTokenList.decode('utf-8')
+            redisInst.set(token, json.dumps([curToken]), ex=2592000)
+    return json.loads(redisInst.get(token).decode('utf-8'))
 
 def get_fcm_tokens(account, v2=False):
     """Return list of FCM tokens that belong to this account"""
@@ -155,10 +168,8 @@ def get_fcm_tokens(account, v2=False):
     if 'data' not in tokens:
         return []
     for t in tokens['data']:
-        fcm_account = redisInst.get(t)
-        if fcm_account is None:
-            continue
-        elif account != fcm_account.decode('utf-8'):
+        account_list = get_or_upgrade_token_account_list(account, t, v2=v2)
+        if account not in account_list:
             continue
         new_token_list['data'].append(t)
     redisInst.set(account, new_token_list)
@@ -407,7 +418,7 @@ def rpc_subscribe(handler, account, currency):
         handler.write_message('{"error":"subscribe error"}')
     else:
         subscriptions[account] = handler.id
-        rdata.hset(handler.id, "account", account)
+        rdata.hset(handler.id, "account", json.dumps([account]))
         sub_pref_cur[handler.id] = currency
         rdata.hset(handler.id, "currency", currency)
         rdata.hset(handler.id, "last-connect", float(time.time()))
@@ -445,16 +456,9 @@ def get_pending_count(handler, account):
     return len(pending['blocks'])
 
 @tornado.gen.coroutine
-def rpc_reconnect(handler):
+def rpc_reconnect(handler, account):
     logging.info('reconnecting;' + handler.request.remote_ip + ';' + handler.id)
     rpc = tornado.httpclient.AsyncHTTPClient()
-    try:
-        account = rdata.hget(handler.id, "account").decode('utf-8')
-    except:
-        logging.error(
-            'reconnect error, account not seen on this server before;' + handler.request.remote_ip + ';' + handler.id)
-        handler.write_message('{"error":"reconnect error","detail":"account not seen on this server before"}')
-        return
 
     message = {
         "action":"account_info",
@@ -564,10 +568,28 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                 if kaliumcast_request['action'] == "account_subscribe":
                     # If account doesnt match the uuid self-heal
                     resubscribe = True
-                    if 'uuid' in kaliumcast_request and 'account' in kaliumcast_request:
+                    if 'uuid' in kaliumcast_request:
+                        # Perform multi-account upgrade if not already done
                         account = rdata.hget(kaliumcast_request['uuid'], "account")
-                        if account is None or account.decode('utf-8').lower() != kaliumcast_request['account'].lower():
+                        # No account for this uuid, first subscribe
+                        if account is None:
                             resubscribe = False
+                        else:
+                            # If account isn't stored in list-format, modify it so it is
+                            # If it already is, add this account to the list
+                            try:
+                                account_list = json.loads(account.decode('utf-8'))
+                                if 'account' in kaliumcast_request and kaliumcast_request['account'].lower() not in account_list:
+                                    account_list.append(kaliumcast_request['account'].lower())
+                                    rdata.hset(kaliumcast_request['uuid'], "account", json.dumps(account_list))
+                            except Exception as e:
+                                if 'account' in kaliumcast_request and kaliumcast_request['account'].lower() != account.decode('utf-8').lower():
+                                    resubscribe = False
+                                else:
+                                    # Perform upgrade to list style
+                                    account_list = []
+                                    account_list.append(account.decode('utf-8').lower())
+                                    rdata.hset(kaliumcast_request['uuid'], "account", json.dumps(account_list))
                     # already subscribed, reconnect
                     if 'uuid' in kaliumcast_request and resubscribe:
                         del clients[self.id]
@@ -586,7 +608,14 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                                 else:
                                     sub_pref_cur[self.id] = 'usd'
                                     rdata.hset(self.id, "currency", 'usd')
-                            rpc_reconnect(self)
+                            # Get relevant account
+                            account_list = json.loads(rdata.hget(self.id, "account").decode('utf-8'))
+                            if 'account' in kaliumcast_request:
+                                account = kaliumcast_request['account']
+                            else:
+                                # Legacy connections
+                                account = account_list[0]
+                            rpc_reconnect(self, account)
                             rdata.rpush("conntrack",
                                         str(float(time.time())) + ":" + self.id + ":connect:" + self.request.remote_ip)
                             # Store FCM token if available, for push notifications
@@ -594,9 +623,9 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                                 update_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token'])
                             elif 'fcm_token_v2' in kaliumcast_request and 'notification_enabled' in kaliumcast_request:
                                 if kaliumcast_request['notification_enabled']:
-                                    update_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token_v2'], v2=True)
+                                    update_fcm_token_for_account(account, kaliumcast_request['fcm_token_v2'], v2=True)
                                 else:
-                                    delete_fcm_token_for_account(rdata.hget(self.id, "account").decode('utf-8'), kaliumcast_request['fcm_token_v2'])                                
+                                    delete_fcm_token_for_account(account, kaliumcast_request['fcm_token_v2'])                                
                         except Exception as e:
                             logging.error('reconnect error;' + str(e) + ';' + self.request.remote_ip + ';' + self.id)
                             reply = {'error': 'reconnect error', 'detail': str(e)}
@@ -713,7 +742,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                         self.write_message('{"error":"pending rpc error","detail":"' + str(e) + '"}')
                 elif kaliumcast_request['action'] == 'account_history':
                     if rdata.hget(self.id, "account") is None:
-                        rdata.hset(self.id, "account", kaliumcast_request['account'])
+                        rdata.hset(self.id, "account", json.dumps([kaliumcast_request['account']]))
                     try:
                         rpc_defer(self, json.dumps(kaliumcast_request))
                     except Exception as e:
@@ -839,7 +868,8 @@ class Callback(tornado.web.RequestHandler):
                             "tag":link
                         },
                         data = {
-                            "click_action": "FLUTTER_NOTIFICATION_CLICK"
+                            "click_action": "FLUTTER_NOTIFICATION_CLICK",
+                            "account": link
                         },
                         priority=aiofcm.PRIORITY_HIGH
                     )
