@@ -543,6 +543,15 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                 else:
                     requestid = None
 
+                # Disallow old clients
+                if self.request.headers.get('X-Client-Version') is None:
+                    xcver = 0
+                else:
+                    xcver = int(self.request.headers.get('X-Client-Version'))
+                if xcver < 34:
+                    self.write_message('{"error":"denied","detail":"your client is out of date and needs to be updated."}')
+                    return
+
                 # adjust counts so nobody can block the node with a huge request - disregard, we have three nodes to
                 # load balance
 
