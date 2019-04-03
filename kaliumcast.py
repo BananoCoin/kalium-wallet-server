@@ -552,7 +552,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                     xcver = 0
                 else:
                     xcver = int(self.request.headers.get('X-Client-Version'))
-                if xcver < 34:
+                if xcver == 33:
                     self.write_message('{"error":"denied","detail":"your client is out of date and needs to be updated."}')
                     return
 
