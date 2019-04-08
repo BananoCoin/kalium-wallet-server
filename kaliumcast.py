@@ -207,10 +207,6 @@ def rpc_request(http_client, body):
     raise tornado.gen.Return(response)
 
 
-def get_real_ip(request):
-    x_real_ip = request.headers.get("X-Real-IP")
-    remote_ip = x_real_ip or request.remote_ip
-
 @tornado.gen.coroutine
 def rpc_defer(handler, message):
     rpc = tornado.httpclient.AsyncHTTPClient()
@@ -218,11 +214,11 @@ def rpc_defer(handler, message):
     logging.info('rpc request return code;' + str(response.code))
     if response.error:
         logging.error('rpc defer request failure;' + str(
-            response.error) + ';' + rpc_url + ';' + message + ';' + get_real_ip(handler.request) + ';' + handler.id)
+            response.error) + ';' + rpc_url + ';' + message + ';' + handler.request.remote_ip + ';' + handler.id)
         reply = "rpc defer error"
     else:
         logging.info('rpc defer response sent;' + str(
-            strclean(response.body)) + ';' + rpc_url + ';' + get_real_ip(handler.request) + ';' + handler.id)
+            strclean(response.body)) + ';' + rpc_url + ';' + handler.request.remote_ip + ';' + handler.id)
         reply = response.body
 
     handler.write_message(reply)
@@ -240,7 +236,7 @@ def pending_defer(handler, request):
 
     if response.error:
         logging.error('pending defer request failure;' + str(
-            response.error) + ';' + rpc_url + ';' + request + ';' + get_real_ip(handler.request) + ';' + handler.id)
+            response.error) + ';' + rpc_url + ';' + request + ';' + handler.request.remote_ip + ';' + handler.id)
         reply = "pending defer error"
     else:
         data = json.loads(response.body.decode('ascii'))
@@ -260,7 +256,7 @@ def pending_defer(handler, request):
 
         reply = json.dumps(newdict)
         logging.info('pending defer response sent;' + str(
-            strclean(reply)) + ';' + rpc_url + ';' + get_real_ip(handler.request) + ';' + handler.id)
+            strclean(reply)) + ';' + rpc_url + ';' + handler.request.remote_ip + ';' + handler.id)
 
     # return to client
     handler.write_message(reply)
@@ -325,7 +321,7 @@ def process_defer(handler, block, do_work):
                     # print('link_response',link_response)
                     if 'error' not in link_response and 'contents' in link_response:
                         logging.error(
-                            'rpc process receive race condition detected;' + get_real_ip(handler.request) +
+                            'rpc process receive race condition detected;' + handler.request.remote_ip +
                             ';' + handler.id + ';User-Agent:' + str(handler.request.headers.get('User-Agent')))
                         handler.write_message('{"error":"receive race condition detected"}')
                         return
@@ -339,7 +335,7 @@ def process_defer(handler, block, do_work):
                 pass
         except:
             logging.error('rpc process receive race condition exception;' + str(
-                sys.exc_info()) + ';' + get_real_ip(handler.request) + ';' + handler.id + ';User-Agent:' + str(
+                sys.exc_info()) + ';' + handler.request.remote_ip + ';' + handler.id + ';User-Agent:' + str(
                 handler.request.headers.get('User-Agent')))
             pass
 
@@ -386,7 +382,7 @@ def work_request(http_client, body):
 def work_defer(handler, message):
     request = json.loads(message)
     if request['hash'] in active_work:
-        logging.error('work already requested;' + get_real_ip(handler.request) + ';' + handler.id)
+        logging.error('work already requested;' + handler.request.remote_ip + ';' + handler.id)
         return
     else:
         active_work.add(request['hash'])
@@ -395,30 +391,30 @@ def work_defer(handler, message):
         response = yield work_request(rpc, message)
         logging.info('work request return code;' + str(response.code))
         if response.error:
-            logging.error('work defer error;' + get_real_ip(handler.request) + ';' + handler.id)
+            logging.error('work defer error;' + handler.request.remote_ip + ';' + handler.id)
             handler.write_message('{"error":"work defer error"}')
             return
         else:
             logging.info('work defer response sent:;' + str(
-                strclean(response.body)) + ';' + get_real_ip(handler.request) + ';' + handler.id)
+                strclean(response.body)) + ';' + handler.request.remote_ip + ';' + handler.id)
             handler.write_message(response.body)
         active_work.remove(request['hash'])
     except:
         logging.error(
-            'work defer exception;' + str(sys.exc_info()) + ';' + get_real_ip(handler.request) + ';' + handler.id)
+            'work defer exception;' + str(sys.exc_info()) + ';' + handler.request.remote_ip + ';' + handler.id)
         active_work.remove(request['hash'])
 
 
 @tornado.gen.coroutine
 def rpc_subscribe(handler, account, currency):
-    logging.info('subscribing;' + get_real_ip(handler.request) + ';' + handler.id)
+    logging.info('subscribing;' + handler.request.remote_ip + ';' + handler.id)
     rpc = tornado.httpclient.AsyncHTTPClient()
     message = '{\"action\":\"account_info",\"account\":\"' + account + '\",\"pending\":true,\"representative\":true}'
-    logging.info('sending request;' + message + ';' + get_real_ip(handler.request) + ';' + handler.id)
+    logging.info('sending request;' + message + ';' + handler.request.remote_ip + ';' + handler.id)
     response = yield rpc_request(rpc, message)
 
     if response.error:
-        logging.error('subscribe error;' + get_real_ip(handler.request) + ';' + handler.id)
+        logging.error('subscribe error;' + handler.request.remote_ip + ';' + handler.id)
         handler.write_message('{"error":"subscribe error"}')
     else:
         subscriptions[account] = handler.id
@@ -438,7 +434,7 @@ def rpc_subscribe(handler, account, currency):
         info['pending_count'] = yield get_pending_count(handler, account)
         info = json.dumps(info)
         logging.info('subscribe response sent;' + str(
-            strclean(response.body)) + ';' + get_real_ip(handler.request) + ';' + handler.id)
+            strclean(response.body)) + ';' + handler.request.remote_ip + ';' + handler.id)
         handler.write_message(info)
 
 @tornado.gen.coroutine
@@ -452,7 +448,7 @@ def get_pending_count(handler, account):
     }
     request = json.dumps(message)
     rpc = tornado.httpclient.AsyncHTTPClient()
-    logging.info('sending request;' + request + ';' + get_real_ip(handler.request) + ';' + handler.id)
+    logging.info('sending request;' + request + ';' + handler.request.remote_ip + ';' + handler.id)
     response = yield rpc_request(rpc, request)
     if response.error:
         return 0
@@ -461,7 +457,7 @@ def get_pending_count(handler, account):
 
 @tornado.gen.coroutine
 def rpc_reconnect(handler, account):
-    logging.info('reconnecting;' + get_real_ip(handler.request) + ';' + handler.id)
+    logging.info('reconnecting;' + handler.request.remote_ip + ';' + handler.id)
     rpc = tornado.httpclient.AsyncHTTPClient()
 
     message = {
@@ -471,11 +467,11 @@ def rpc_reconnect(handler, account):
         "representative":True
     }
     request = json.dumps(message)
-    logging.info('sending request;' + request + ';' + get_real_ip(handler.request) + ';' + handler.id)
+    logging.info('sending request;' + request + ';' + handler.request.remote_ip + ';' + handler.id)
     response = yield rpc_request(rpc, request)
 
     if response.error:
-        logging.error('reconnect error;' + get_real_ip(handler.request) + ';' + handler.id)
+        logging.error('reconnect error;' + handler.request.remote_ip + ';' + handler.id)
         handler.write_message('{"error":"reconnect error"}')
     else:
         subscriptions[
@@ -494,20 +490,20 @@ def rpc_reconnect(handler, account):
         info = json.dumps(info)
 
         logging.info(
-            'reconnect response sent ' + str(len(info)) + 'bytes;' + get_real_ip(handler.request) + ';' + handler.id)
+            'reconnect response sent ' + str(len(info)) + 'bytes;' + handler.request.remote_ip + ';' + handler.id)
 
         handler.write_message(info)
 
 
 @tornado.gen.coroutine
 def rpc_accountcheck(handler, account):
-    logging.info('checking account;' + get_real_ip(handler.request) + ';' + handler.id)
+    logging.info('checking account;' + handler.request.remote_ip + ';' + handler.id)
     rpc = tornado.httpclient.AsyncHTTPClient()
     message = '{\"action\":\"account_info",\"account\":\"' + account + '\"}'
-    logging.info('sending request;' + message + ';' + get_real_ip(handler.request) + ';' + handler.id)
+    logging.info('sending request;' + message + ';' + handler.request.remote_ip + ';' + handler.id)
     response = yield rpc_request(rpc, message)
     if response.error:
-        logging.error('account check error;' + get_real_ip(handler.request) + ';' + handler.id)
+        logging.error('account check error;' + handler.request.remote_ip + ';' + handler.id)
         handler.write_message('{"error":"account check error"}')
     else:
         info = json.loads(response.body.decode('ascii'))
@@ -517,7 +513,7 @@ def rpc_accountcheck(handler, account):
         except:
             info = '{"ready":true}'
 
-        logging.info('account check response sent;' + get_real_ip(handler.request) + ';' + handler.id)
+        logging.info('account check response sent;' + handler.request.remote_ip + ';' + handler.id)
         handler.write_message(info)
 
 
