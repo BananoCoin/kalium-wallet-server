@@ -1,3 +1,13 @@
+# ~~~ NOTICE - THIS REPOSITORY IS DEPRECATED ~~~
+
+This project may still be useful to many people and is remaining for reference purposes.
+
+However, this project is being phased out as it has been replaced by a new version rewritten with aiohttp
+
+The new verson can be found [HERE](https://github.com/appditto/natrium-wallet-server)
+
+# ~~~ NOTICE - THIS REPOSITORY IS DEPRECATED ~~~
+
 # kalium-wallet-server (BANANO)
 
 **Requires Python 3.6**
